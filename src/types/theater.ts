@@ -33,3 +33,12 @@ export interface StageState {
   };
   actorPresent: 'none' | 'back-stage' | 'on-stage' | 'haked'; // 役者の位置
 }
+
+// 【追加】興行の進行フェーズ定義（現場のタイムライン）
+export type StagePhase = 
+  | 'SETTING'       // 1. セッティング（開場前・舞台上で大道具の事前仕込み・調整を行う）
+  | 'DOORS_OPEN'    // 2. 開場（客入れ・SEIKO時計は現在時刻、客席がざわつき始める）
+  | 'PERFORMANCE'   // 3. 開演（本番スタート！合図とともにストップウォッチが走り出す）
+  | 'INTERMISSION'  // 4. 幕間（休憩・次の幕に向けた転換・セット替え）
+  | 'POST_SHOW'     // 5. 終演（バラシの準備、客席送り出し）
+  | 'EXIT';         // 6. 客だし（完全撤収）
