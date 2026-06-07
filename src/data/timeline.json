@@ -1,0 +1,6 @@
+[
+  { "id": 1, "time": 0, "type": "BUZZER", "label": "開演ブザー鳴動" },
+  { "id": 2, "time": 5000, "type": "CURTAIN", "action": "開", "label": "00:05:00 ➔ 中割幕【開】/ ホリゾント点灯" },
+  { "id": 3, "time": 15000, "type": "KOSERI", "action": "昇", "label": "00:15:00 ➔ 役者板付き、小迫り【昇】(+450)" },
+  { "id": 4, "time": 30000, "type": "SYNCHRO", "action": "GO", "label": "00:30:00 ➔ 役者ハケの瞬間、音響・照明【GO！】" }
+]
