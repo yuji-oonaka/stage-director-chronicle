@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import type { StageState, TimelineEvent } from "../types/theater";
 import timelineData from "../data/timeline.json";
 import { SeikoClock } from "./SeikoClock";
+import { StageMonitor } from "./StageMonitor";
 
 const initialStageState: StageState = {
   curtain: "closed",
@@ -106,15 +107,31 @@ export const TheaterMaster: React.FC = () => {
         </button>
       </div>
 
-      {/* 【追加】SEIKO風クロックを配置。親のStateをそのまま流し込む単方向データフロー */}
-      <div style={{ marginBottom: "20px" }}>
-        <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-          ⏱ 調整室モニター（子）
-        </h3>
-        <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
+      <div
+        style={{
+          display: "flex",
+          gap: "20px",
+          flexWrap: "wrap",
+          marginBottom: "20px",
+        }}
+      >
+        {/* タイムマスター（時計） */}
+        <div>
+          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
+            ⏱ 調整室モニター（子）
+          </h3>
+          <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
+        </div>
+
+        {/* 【追加】舞台モニター（子）を配置。一方向データフローで状態を投影 */}
+        <div style={{ flex: "1", minWidth: "300px" }}>
+          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
+            🎬 舞台目視モニター（子）
+          </h3>
+          <StageMonitor stageState={stageState} />
+        </div>
       </div>
 
-      {/* 内部システム時間は時計側で綺麗に見えるようになったので、ここは薄いグレーのデバッグ表記に変更 */}
       <div style={{ fontSize: "14px", color: "#666", marginBottom: "30px" }}>
         内部RAWタイム: {(elapsedTime / 1000).toFixed(3)}s
       </div>
@@ -127,7 +144,7 @@ export const TheaterMaster: React.FC = () => {
           color: "#888",
         }}
       >
-        <h3>🔍 デバッグモニター（変数使用化）</h3>
+        <h3>🔍 デバッグモニター</h3>
         <p>現在の舞台機構状態: {JSON.stringify(stageState)}</p>
         <p>読み込み済みの総キュー数: {timeline.length} 個</p>
       </div>
