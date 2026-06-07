@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 // 【修正】型インポートであることを明示するために 'type' を追加
 import type { StageState, TimelineEvent } from "../types/theater";
 import timelineData from "../data/timeline.json";
+import { SeikoClock } from "./SeikoClock";
 
 const initialStageState: StageState = {
   curtain: "closed",
@@ -105,15 +106,19 @@ export const TheaterMaster: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ fontSize: "18px", color: "#aaa", marginBottom: "30px" }}>
-        内部システム時間:{" "}
-        <span style={{ color: "#fff", fontSize: "24px" }}>
-          {(elapsedTime / 1000).toFixed(3)}
-        </span>{" "}
-        秒
+      {/* 【追加】SEIKO風クロックを配置。親のStateをそのまま流し込む単方向データフロー */}
+      <div style={{ marginBottom: "20px" }}>
+        <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
+          ⏱ 調整室モニター（子）
+        </h3>
+        <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
       </div>
 
-      {/* 【修正】stageState と timeline を仮出力して未使用エラーを回避（かつデバッグしやすく） */}
+      {/* 内部システム時間は時計側で綺麗に見えるようになったので、ここは薄いグレーのデバッグ表記に変更 */}
+      <div style={{ fontSize: "14px", color: "#666", marginBottom: "30px" }}>
+        内部RAWタイム: {(elapsedTime / 1000).toFixed(3)}s
+      </div>
+
       <div
         style={{
           borderTop: "1px solid #333",
