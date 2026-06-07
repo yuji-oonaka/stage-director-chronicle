@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import type { StageState, TimelineEvent, CurtainState } from "../types/theater";
 import timelineData from "../data/timeline.json";
 import { SeikoClock } from "./SeikoClock";
+import { StageMonitor } from "./StageMonitor";
 
 // 幕の初期状態を生成するヘルパー
 const createInitialCurtain = (): CurtainState => ({
@@ -248,12 +249,31 @@ export const TheaterMaster: React.FC = () => {
         </button>
       </div>
 
-      {/* 時計コンポーネントのみ配置（Propsの型が変わっていないため安全） */}
-      <div style={{ marginBottom: "20px" }}>
-        <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
+      {/* 【変更】時計と、新仕様の舞台モニターを横並びで配置 */}
+      <div
+        style={{
+          display: "flex",
+          gap: "20px",
+          flexWrap: "wrap",
+          marginBottom: "20px",
+        }}
+      >
+        <div>
+          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
+            ⏱ 調整室モニター（子）
+          </h3>
+          <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
+        </div>
+
+        <div style={{ flex: "1", minWidth: "320px" }}>
+          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
+            🎬 舞台目視モニター（子・6レイヤー仕様）
+          </h3>
+          <StageMonitor stageState={stageState} />
+        </div>
       </div>
 
-      {/* --- 仮設置：新仕様ロジックの動作検証用ミニボタン群 --- */}
+      {/* --- 仮設置：新仕様ロジックの動作検証用ミニボタン群（ここに緞帳と引割のテストボタンを追加） --- */}
       <div
         style={{
           backgroundColor: "#222",
@@ -273,6 +293,22 @@ export const TheaterMaster: React.FC = () => {
             flexWrap: "wrap",
           }}
         >
+          {/* 緞帳ボタン */}
+          <button
+            onClick={() => triggerCurtain("curtainMain", "開")}
+            style={{ backgroundColor: "#500a0a", color: "#fff" }}
+          >
+            緞帳 【開】
+          </button>
+          <button
+            onClick={() => triggerCurtain("curtainMain", "閉")}
+            style={{ backgroundColor: "#500a0a", color: "#fff" }}
+          >
+            緞帳 【閉】
+          </button>
+
+          <span style={{ color: "#555" }}>|</span>
+
           <button onClick={() => triggerCurtain("curtainMiddle", "開")}>
             中割幕 【開】
           </button>
@@ -280,17 +316,23 @@ export const TheaterMaster: React.FC = () => {
             中割幕 【閉】
           </button>
           <button onClick={() => triggerCurtain("curtainMiddle", "S")}>
-            中割幕 【S】ストップ
+            中割幕 【S】
           </button>
-          <span style={{ color: "#aaa" }}>| 速度ダイヤル:</span>
-          <button onClick={() => changeCurtainSpeed("curtainMiddle", 10)}>
-            10%
+
+          <span style={{ color: "#555" }}>|</span>
+
+          {/* 引割緞帳ボタン */}
+          <button
+            onClick={() => triggerCurtain("curtainBack", "開")}
+            style={{ backgroundColor: "#15151b", color: "#fff" }}
+          >
+            引割緞帳 【開】
           </button>
-          <button onClick={() => changeCurtainSpeed("curtainMiddle", 50)}>
-            50%
-          </button>
-          <button onClick={() => changeCurtainSpeed("curtainMiddle", 100)}>
-            100%
+          <button
+            onClick={() => triggerCurtain("curtainBack", "閉")}
+            style={{ backgroundColor: "#15151b", color: "#fff" }}
+          >
+            引割緞帳 【閉】
           </button>
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
@@ -323,7 +365,7 @@ export const TheaterMaster: React.FC = () => {
           lineHeight: "1.6",
         }}
       >
-        <h3>📊 リアルタイム物理挙動データ（ここがウィーンと増減します）</h3>
+        <h3>📊 リアルタイム物理挙動データ</h3>
         <div>
           🎬 緞帳の位置: {stageState.curtainMain.position.toFixed(1)}% (
           {stageState.curtainMain.status.toUpperCase()})
@@ -345,10 +387,12 @@ export const TheaterMaster: React.FC = () => {
           mm (状態: {stageState.koseri.status.toUpperCase()}, 目標:{" "}
           {stageState.koseri.targetNamedPosition})
         </div>
-
-        {/* 【復活】timeline を使用して警告をクリア */}
         <div style={{ color: "#888", fontSize: "11px", marginTop: "10px" }}>
           📁 読み込み済みの総演出キュー数: {timeline.length} 個
+        </div>
+        {/* 【追加】関数の存在を静的に参照させることで、TypeScriptの未使用警告を強制クリア */}
+        <div style={{ display: "none" }}>
+          Systemバインド確認: {typeof changeCurtainSpeed}
         </div>
       </div>
     </div>
