@@ -4,6 +4,7 @@ import type { StageState, TimelineEvent, CurtainState } from "../types/theater";
 import timelineData from "../data/timeline.json";
 import { SeikoClock } from "./SeikoClock";
 import { StageMonitor } from "./StageMonitor";
+import { OperatorConsole } from "./OperatorConsole";
 
 // 幕の初期状態を生成するヘルパー
 const createInitialCurtain = (): CurtainState => ({
@@ -249,7 +250,7 @@ export const TheaterMaster: React.FC = () => {
         </button>
       </div>
 
-      {/* 【変更】時計と、新仕様の舞台モニターを横並びで配置 */}
+      {/* モニターセクション（時計 ＆ 6レイヤー舞台モニター） */}
       <div
         style={{
           display: "flex",
@@ -273,86 +274,18 @@ export const TheaterMaster: React.FC = () => {
         </div>
       </div>
 
-      {/* --- 仮設置：新仕様ロジックの動作検証用ミニボタン群（ここに緞帳と引割のテストボタンを追加） --- */}
-      <div
-        style={{
-          backgroundColor: "#222",
-          padding: "15px",
-          borderRadius: "4px",
-          marginBottom: "20px",
-        }}
-      >
-        <h4 style={{ margin: "0 0 10px 0", color: "#ff9900" }}>
-          🧪 新仕様ロジック リアルタイム動作テスト
-        </h4>
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            marginBottom: "10px",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* 緞帳ボタン */}
-          <button
-            onClick={() => triggerCurtain("curtainMain", "開")}
-            style={{ backgroundColor: "#500a0a", color: "#fff" }}
-          >
-            緞帳 【開】
-          </button>
-          <button
-            onClick={() => triggerCurtain("curtainMain", "閉")}
-            style={{ backgroundColor: "#500a0a", color: "#fff" }}
-          >
-            緞帳 【閉】
-          </button>
-
-          <span style={{ color: "#555" }}>|</span>
-
-          <button onClick={() => triggerCurtain("curtainMiddle", "開")}>
-            中割幕 【開】
-          </button>
-          <button onClick={() => triggerCurtain("curtainMiddle", "閉")}>
-            中割幕 【閉】
-          </button>
-          <button onClick={() => triggerCurtain("curtainMiddle", "S")}>
-            中割幕 【S】
-          </button>
-
-          <span style={{ color: "#555" }}>|</span>
-
-          {/* 引割緞帳ボタン */}
-          <button
-            onClick={() => triggerCurtain("curtainBack", "開")}
-            style={{ backgroundColor: "#15151b", color: "#fff" }}
-          >
-            引割緞帳 【開】
-          </button>
-          <button
-            onClick={() => triggerCurtain("curtainBack", "閉")}
-            style={{ backgroundColor: "#15151b", color: "#fff" }}
-          >
-            引割緞帳 【閉】
-          </button>
-        </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={() => triggerKoseri("+450")}>小迫り 【+450】</button>
-          <button onClick={() => triggerKoseri("舞台")}>
-            小迫り 【舞台】(0)
-          </button>
-          <button onClick={() => triggerKoseri("ぬすみ")}>
-            小迫り 【ぬすみ】(-50)
-          </button>
-          <button onClick={() => triggerKoseri("奈落")}>
-            小迫り 【奈落】(-1000)
-          </button>
-          <button
-            onClick={() => stopKoseri()}
-            style={{ backgroundColor: "#aa3333", color: "#fff" }}
-          >
-            迫り【S】停止
-          </button>
-        </div>
+      {/* 【完全結合】リニューアルした三研工業風操作盤 */}
+      <div style={{ marginBottom: "30px" }}>
+        <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
+          🎛 下手舞台袖操作盤（子・三研工業仕様）
+        </h3>
+        <OperatorConsole
+          stageState={stageState}
+          onCurtainAction={triggerCurtain}
+          onCurtainSpeedChange={changeCurtainSpeed}
+          onKoseriAction={triggerKoseri}
+          onKoseriStop={stopKoseri}
+        />
       </div>
 
       {/* リアルタイム数値デバッグモニター */}
@@ -389,10 +322,6 @@ export const TheaterMaster: React.FC = () => {
         </div>
         <div style={{ color: "#888", fontSize: "11px", marginTop: "10px" }}>
           📁 読み込み済みの総演出キュー数: {timeline.length} 個
-        </div>
-        {/* 【追加】関数の存在を静的に参照させることで、TypeScriptの未使用警告を強制クリア */}
-        <div style={{ display: "none" }}>
-          Systemバインド確認: {typeof changeCurtainSpeed}
         </div>
       </div>
     </div>
