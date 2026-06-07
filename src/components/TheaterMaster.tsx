@@ -1,17 +1,34 @@
-import React, { useState, useEffect, useRef } from "react";
-import type { StageState, TimelineEvent } from "../types/theater";
+import { useState, useEffect, useRef } from "react";
+// KoseriState をインポートから削除
+import type { StageState, TimelineEvent, CurtainState } from "../types/theater";
 import timelineData from "../data/timeline.json";
 import { SeikoClock } from "./SeikoClock";
-import { StageMonitor } from "./StageMonitor";
-// 【追加】操作盤のインポート
-import { OperatorConsole } from "./OperatorConsole";
 
+// 幕の初期状態を生成するヘルパー
+const createInitialCurtain = (): CurtainState => ({
+  position: 0, // 0: 全閉、100: 全開
+  status: "closed",
+  speedDial: 50, // 写真のダイヤル初期値を意識して50%スタート
+});
+
+// 新・舞台初期状態（本物の構造レイヤーを完全網羅）
 const initialStageState: StageState = {
-  curtain: "closed",
-  koseri: "down",
-  horizone: false,
+  curtainMain: createInitialCurtain(), // 1. 緞帳
+  koseri: {
+    // 2. 小迫り
+    currentHeight: -1000, // 奈落（地下1000mm）に沈んでいる状態スタート
+    status: "down",
+    targetNamedPosition: "奈落",
+  },
+  curtainMiddle: createInitialCurtain(), // 3. 中割幕
+  curtainBack: createInitialCurtain(), // 4. 引割緞帳（渡りの引き割幕）
+  horizone: { active: false, color: "#050505" },
   actorPresent: "none",
 };
+
+// シミュレーション用の基準速度設定
+const CURTAIN_BASE_SPEED = 0.01; // 100%速度のとき、1msあたりに動く幕の％量
+const KOSERI_SPEED = 0.3; // 1msあたりに昇降するミリメートル（mm）
 
 export const TheaterMaster: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -20,13 +37,79 @@ export const TheaterMaster: React.FC = () => {
 
   const requestRef = useRef<number | null>(null);
   const previousTimeRef = useRef<number | null>(null);
-
   const timeline: TimelineEvent[] = timelineData as TimelineEvent[];
 
+  // 毎フレーム呼ばれる高精度シミュレーション関数
   const animate = (time: number) => {
     if (previousTimeRef.current !== null) {
       const deltaTime = time - previousTimeRef.current;
       setElapsedTime((prevTime) => prevTime + deltaTime);
+
+      // --- 物理数値のリアルタイム計算処理 ---
+      setStageState((prev) => {
+        const next = { ...prev };
+
+        // 1. 各種幕（緞帳、中割、引割）のシミュレーション計算
+        const updateCurtain = (curtain: CurtainState): CurtainState => {
+          let pos = curtain.position;
+          let stat = curtain.status;
+          // ダイヤル速度(%)に応じた実際の移動速度
+          const speed =
+            deltaTime * CURTAIN_BASE_SPEED * (curtain.speedDial / 100);
+
+          if (stat === "opening") {
+            pos += speed;
+            if (pos >= 100) {
+              pos = 100;
+              stat = "open";
+            }
+          } else if (stat === "closing") {
+            pos -= speed;
+            if (pos <= 0) {
+              pos = 0;
+              stat = "closed";
+            }
+          }
+          return { ...curtain, position: pos, status: stat };
+        };
+
+        next.curtainMain = updateCurtain(next.curtainMain);
+        next.curtainMiddle = updateCurtain(next.curtainMiddle);
+        next.curtainBack = updateCurtain(next.curtainBack);
+
+        // 2. 小迫り（セリ）の無段階・目標値ターゲット昇降計算
+        let kHeight = next.koseri.currentHeight;
+        let kStatus = next.koseri.status;
+        let targetHeight = kHeight;
+
+        // ボタンから指定された名前ベースの目標ミリ数を割り出す
+        if (next.koseri.targetNamedPosition === "+450") targetHeight = 450;
+        if (next.koseri.targetNamedPosition === "舞台") targetHeight = 0;
+        if (next.koseri.targetNamedPosition === "ぬすみ") targetHeight = -50;
+        if (next.koseri.targetNamedPosition === "奈落") targetHeight = -1000;
+
+        if (kStatus === "rising") {
+          kHeight += deltaTime * KOSERI_SPEED;
+          if (kHeight >= targetHeight) {
+            kHeight = targetHeight;
+            kStatus = kHeight === 450 ? "up" : "stopped";
+          }
+        } else if (kStatus === "falling") {
+          kHeight -= deltaTime * KOSERI_SPEED;
+          if (kHeight <= targetHeight) {
+            kHeight = targetHeight;
+            kStatus = kHeight === -1000 ? "down" : "stopped";
+          }
+        }
+
+        next.koseri = {
+          ...next.koseri,
+          currentHeight: kHeight,
+          status: kStatus,
+        };
+
+        return next;
+      });
     }
     previousTimeRef.current = time;
     requestRef.current = requestAnimationFrame(animate);
@@ -36,9 +119,7 @@ export const TheaterMaster: React.FC = () => {
     if (isPlaying) {
       requestRef.current = requestAnimationFrame(animate);
     } else {
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
       previousTimeRef.current = null;
     }
     return () => {
@@ -46,86 +127,67 @@ export const TheaterMaster: React.FC = () => {
     };
   }, [isPlaying]);
 
-  // 【将来への布石】自動進行処理（ブザーが鳴る、役者が勝手に板付くなどの環境変化用）
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    // 開演ブザー（0秒）の自動シミュレート
-    if (
-      elapsedTime >= 0 &&
-      stageState.actorPresent === "none" &&
-      stageState.curtain === "closed"
-    ) {
-      // 最初の状態トリガー（ここでは役者をスタンバイさせるなど）
-      setStageState((prev) => ({ ...prev, actorPresent: "none" }));
-    }
-
-    // 14秒時点で役者が勝手に裏でスタンバイ（板付き準備）する等のタイムライン自動進行
-    if (
-      elapsedTime >= 14000 &&
-      elapsedTime < 15000 &&
-      stageState.actorPresent === "none"
-    ) {
-      setStageState((prev) => ({ ...prev, actorPresent: "on-stage" })); // 15秒の迫り上がりに向けて役者が板付く
-    }
-  }, [elapsedTime, isPlaying]);
-
   const handleReset = () => {
     setIsPlaying(false);
     setElapsedTime(0);
     setStageState(initialStageState);
   };
 
-  // 【追加】中割幕ボタンが押された時の処理
-  const handleCurtainAction = (action: "開" | "閉" | "S") => {
-    console.log(
-      `[CUE] 中割幕操作: ${action} (Time: ${(elapsedTime / 1000).toFixed(3)}s)`,
-    );
-
+  // --- 【新規】実物写真ボタンを模した仮のイベントハンドラー群 ---
+  // 幕の操作（引割幕・中割幕・引割緞帳を一括で処理できる汎用関数）
+  const triggerCurtain = (
+    target: "curtainMain" | "curtainMiddle" | "curtainBack",
+    action: "開" | "閉" | "S",
+  ) => {
     setStageState((prev) => {
-      let nextCurtain: StageState["curtain"] = prev.curtain;
-      let nextHorizone = prev.horizone;
-
-      if (action === "開") {
-        nextCurtain = "open";
-        nextHorizone = true; // 仕様書より：中割幕【開】/ ホリゾント点灯
-      } else if (action === "閉") {
-        nextCurtain = "closed";
-      } else if (action === "S") {
-        nextCurtain = "stopped";
-      }
-
-      return { ...prev, curtain: nextCurtain, horizone: nextHorizone };
+      const curtain = prev[target];
+      let stat = curtain.status;
+      if (action === "開") stat = "opening";
+      if (action === "閉") stat = "closing";
+      if (action === "S") stat = "stopped";
+      return { ...prev, [target]: { ...curtain, status: stat } };
     });
   };
 
-  // 【追加】小迫りボタンが押された時の処理
-  const handleKoseriAction = (action: "昇" | "降" | "S") => {
-    console.log(
-      `[CUE] 小迫り操作: ${action} (Time: ${(elapsedTime / 1000).toFixed(3)}s)`,
-    );
-
-    setStageState((prev) => {
-      let nextKoseri: StageState["koseri"] = prev.koseri;
-
-      if (action === "昇") nextKoseri = "up";
-      if (action === "降") nextKoseri = "down";
-      if (action === "S") nextKoseri = "stopped";
-
-      return { ...prev, koseri: nextKoseri };
-    });
-  };
-
-  // 【追加】演出同期 GO ボタンが押された時の処理
-  const handleSynchroGO = () => {
-    console.log(
-      `[CUE] 音響・照明 GO! (Time: ${(elapsedTime / 1000).toFixed(3)}s)`,
-    );
-
+  // 幕の速度ダイヤル変更（％変更）
+  const changeCurtainSpeed = (
+    target: "curtainMain" | "curtainMiddle" | "curtainBack",
+    speed: number,
+  ) => {
     setStageState((prev) => ({
       ...prev,
-      actorPresent:
-        prev.actorPresent === "on-stage" ? "haked" : prev.actorPresent,
+      [target]: { ...prev[target], speedDial: speed },
+    }));
+  };
+
+  // 小迫りの目標位置指定操作（+450、舞台、ぬすみ、奈落）
+  const triggerKoseri = (namedPos: "+450" | "舞台" | "ぬすみ" | "奈落") => {
+    setStageState((prev) => {
+      const current = prev.koseri.currentHeight;
+      let target = current;
+      if (namedPos === "+450") target = 450;
+      if (namedPos === "舞台") target = 0;
+      if (namedPos === "ぬすみ") target = -50;
+      if (namedPos === "奈落") target = -1000;
+
+      const stat =
+        target > current ? "rising" : target < current ? "falling" : "stopped";
+      return {
+        ...prev,
+        koseri: { ...prev.koseri, targetNamedPosition: namedPos, status: stat },
+      };
+    });
+  };
+
+  // 小迫りの緊急ストップ
+  const stopKoseri = () => {
+    setStageState((prev) => ({
+      ...prev,
+      koseri: {
+        ...prev.koseri,
+        status: "stopped",
+        targetNamedPosition: "none",
+      },
     }));
   };
 
@@ -146,9 +208,10 @@ export const TheaterMaster: React.FC = () => {
           color: "#00ffcc",
         }}
       >
-        【主制御盤】TheaterMaster (親)
+        【新主制御盤】TheaterMaster (親)
       </h2>
 
+      {/* 演目RUN/RESETコンソール */}
       <div
         style={{
           marginBottom: "20px",
@@ -185,53 +248,108 @@ export const TheaterMaster: React.FC = () => {
         </button>
       </div>
 
-      {/* モニターセクション */}
+      {/* 時計コンポーネントのみ配置（Propsの型が変わっていないため安全） */}
+      <div style={{ marginBottom: "20px" }}>
+        <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
+      </div>
+
+      {/* --- 仮設置：新仕様ロジックの動作検証用ミニボタン群 --- */}
       <div
         style={{
-          display: "flex",
-          gap: "20px",
-          flexWrap: "wrap",
+          backgroundColor: "#222",
+          padding: "15px",
+          borderRadius: "4px",
           marginBottom: "20px",
         }}
       >
-        <div>
-          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-            ⏱ 調整室モニター（子）
-          </h3>
-          <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
+        <h4 style={{ margin: "0 0 10px 0", color: "#ff9900" }}>
+          🧪 新仕様ロジック リアルタイム動作テスト
+        </h4>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "10px",
+            flexWrap: "wrap",
+          }}
+        >
+          <button onClick={() => triggerCurtain("curtainMiddle", "開")}>
+            中割幕 【開】
+          </button>
+          <button onClick={() => triggerCurtain("curtainMiddle", "閉")}>
+            中割幕 【閉】
+          </button>
+          <button onClick={() => triggerCurtain("curtainMiddle", "S")}>
+            中割幕 【S】ストップ
+          </button>
+          <span style={{ color: "#aaa" }}>| 速度ダイヤル:</span>
+          <button onClick={() => changeCurtainSpeed("curtainMiddle", 10)}>
+            10%
+          </button>
+          <button onClick={() => changeCurtainSpeed("curtainMiddle", 50)}>
+            50%
+          </button>
+          <button onClick={() => changeCurtainSpeed("curtainMiddle", 100)}>
+            100%
+          </button>
         </div>
-
-        <div style={{ flex: "1", minWidth: "300px" }}>
-          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-            🎬 舞台目視モニター（子）
-          </h3>
-          <StageMonitor stageState={stageState} />
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={() => triggerKoseri("+450")}>小迫り 【+450】</button>
+          <button onClick={() => triggerKoseri("舞台")}>
+            小迫り 【舞台】(0)
+          </button>
+          <button onClick={() => triggerKoseri("ぬすみ")}>
+            小迫り 【ぬすみ】(-50)
+          </button>
+          <button onClick={() => triggerKoseri("奈落")}>
+            小迫り 【奈落】(-1000)
+          </button>
+          <button
+            onClick={() => stopKoseri()}
+            style={{ backgroundColor: "#aa3333", color: "#fff" }}
+          >
+            迫り【S】停止
+          </button>
         </div>
       </div>
 
-      {/* 【追加】操作盤盤面セクション */}
-      <div style={{ marginBottom: "30px" }}>
-        <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-          🎛 下手舞台袖操作盤（子）
-        </h3>
-        <OperatorConsole
-          onCurtainAction={handleCurtainAction}
-          onKoseriAction={handleKoseriAction}
-          onSynchroGO={handleSynchroGO}
-        />
-      </div>
-
+      {/* リアルタイム数値デバッグモニター */}
       <div
         style={{
           borderTop: "1px solid #333",
           paddingTop: "20px",
-          fontSize: "12px",
-          color: "#888",
+          fontSize: "13px",
+          color: "#00ff00",
+          lineHeight: "1.6",
         }}
       >
-        <h3>🔍 デバッグモニター</h3>
-        <p>現在の舞台機構状態: {JSON.stringify(stageState)}</p>
-        <p>読み込み済みの総キュー数: {timeline.length} 個</p>
+        <h3>📊 リアルタイム物理挙動データ（ここがウィーンと増減します）</h3>
+        <div>
+          🎬 緞帳の位置: {stageState.curtainMain.position.toFixed(1)}% (
+          {stageState.curtainMain.status.toUpperCase()})
+        </div>
+        <div>
+          🎬 中割幕の位置: {stageState.curtainMiddle.position.toFixed(1)}%
+          (速度: {stageState.curtainMiddle.speedDial}%, 状態:{" "}
+          {stageState.curtainMiddle.status.toUpperCase()})
+        </div>
+        <div>
+          🎬 引割緞帳の位置: {stageState.curtainBack.position.toFixed(1)}% (
+          {stageState.curtainBack.status.toUpperCase()})
+        </div>
+        <div style={{ color: "#ffff00", marginTop: "5px" }}>
+          🏗 小迫りの高さ:{" "}
+          <span style={{ fontSize: "16px", fontWeight: "bold" }}>
+            {Math.round(stageState.koseri.currentHeight)}
+          </span>{" "}
+          mm (状態: {stageState.koseri.status.toUpperCase()}, 目標:{" "}
+          {stageState.koseri.targetNamedPosition})
+        </div>
+
+        {/* 【復活】timeline を使用して警告をクリア */}
+        <div style={{ color: "#888", fontSize: "11px", marginTop: "10px" }}>
+          📁 読み込み済みの総演出キュー数: {timeline.length} 個
+        </div>
       </div>
     </div>
   );
