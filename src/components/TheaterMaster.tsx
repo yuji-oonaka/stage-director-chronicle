@@ -1,237 +1,324 @@
-import React, { useState, useEffect, useRef } from "react";
-import type { StageState, TimelineEvent } from "../types/theater";
+// components/TheaterMaster.tsx
+import { useState, useEffect, useRef } from "react";
+import type { StageState, CurtainState, StagePhase } from "../types/theater";
 import timelineData from "../data/timeline.json";
 import { SeikoClock } from "./SeikoClock";
 import { StageMonitor } from "./StageMonitor";
-// 【追加】操作盤のインポート
 import { OperatorConsole } from "./OperatorConsole";
+import { NarakuMonitor } from "./NarakuMonitor";
+import { calculateNextStageState } from "../utils/stagePhysics"; // 上記の物理関数をインポート
+
+const createDefaultCurtain = (): CurtainState => ({
+  position: 100,
+  status: "open",
+  speedDial: 100,
+});
 
 const initialStageState: StageState = {
-  curtain: "closed",
-  koseri: "down",
-  horizone: false,
+  curtainMain: createDefaultCurtain(),
+  koseri: { currentHeight: 0, status: "stopped", targetNamedPosition: "舞台" },
+  curtainMiddle: createDefaultCurtain(),
+  curtainBack: createDefaultCurtain(),
+  horizone: { active: true, color: "#ffffff" },
   actorPresent: "none",
 };
 
 export const TheaterMaster: React.FC = () => {
+  const [phase, setPhase] = useState<StagePhase>("SETTING");
+  const [mainCurtainMode, setMainCurtainMode] = useState<
+    "vertical" | "horizontal"
+  >("vertical");
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [stageState, setStageState] = useState<StageState>(initialStageState);
+  
 
+  // 精密タイマーのための参照系オブジェクト（rAFループを一度も壊さないための防壁）
   const requestRef = useRef<number | null>(null);
   const previousTimeRef = useRef<number | null>(null);
 
-  const timeline: TimelineEvent[] = timelineData as TimelineEvent[];
-
-  const animate = (time: number) => {
-    if (previousTimeRef.current !== null) {
-      const deltaTime = time - previousTimeRef.current;
-      setElapsedTime((prevTime) => prevTime + deltaTime);
-    }
-    previousTimeRef.current = time;
-    requestRef.current = requestAnimationFrame(animate);
-  };
+  // 常に最新のReact状態をrAFループ内にノータイムで中継するためのRef
+  const loopStateRef = useRef({ phase, isPlaying });
+  loopStateRef.current = { phase, isPlaying };
 
   useEffect(() => {
-    if (isPlaying) {
-      requestRef.current = requestAnimationFrame(animate);
-    } else {
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
+    const animate = (time: number) => {
+      if (previousTimeRef.current !== null) {
+        const deltaTime = time - previousTimeRef.current;
+        const current = loopStateRef.current;
+
+        // 本番中かつ再生中のみ、ストップウォッチの時間を進める
+        if (current.phase === "PERFORMANCE" && current.isPlaying) {
+          setElapsedTime((prev) => prev + deltaTime);
+        }
+
+        // 外部に隔離したピュアな物理演算関数を呼び出し、必要なときだけStateを更新する
+        setStageState((prev) => {
+          const { nextState, isChanged } = calculateNextStageState(
+            prev,
+            deltaTime,
+          );
+          return isChanged ? nextState : prev;
+        });
       }
-      previousTimeRef.current = null;
-    }
+      previousTimeRef.current = time;
+      requestRef.current = requestAnimationFrame(animate);
+    };
+
+    // 初回マウント時に「一度だけ」ループを起動。これ以降、フェーズ変更等でループは絶対に壊れない
+    requestRef.current = requestAnimationFrame(animate);
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying]);
+  }, []); // 依存配列は空！不滅のタイマーループ
 
-  // 【将来への布石】自動進行処理（ブザーが鳴る、役者が勝手に板付くなどの環境変化用）
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    // 開演ブザー（0秒）の自動シミュレート
-    if (
-      elapsedTime >= 0 &&
-      stageState.actorPresent === "none" &&
-      stageState.curtain === "closed"
-    ) {
-      // 最初の状態トリガー（ここでは役者をスタンバイさせるなど）
-      setStageState((prev) => ({ ...prev, actorPresent: "none" }));
-    }
-
-    // 14秒時点で役者が勝手に裏でスタンバイ（板付き準備）する等のタイムライン自動進行
-    if (
-      elapsedTime >= 14000 &&
-      elapsedTime < 15000 &&
-      stageState.actorPresent === "none"
-    ) {
-      setStageState((prev) => ({ ...prev, actorPresent: "on-stage" })); // 15秒の迫り上がりに向けて役者が板付く
-    }
-  }, [elapsedTime, isPlaying]);
+  // --- 進行管理・操作盤からのイベントハンドラー（変更なし） ---
+  const handlePhaseChange = (nextPhase: StagePhase) => {
+    setPhase(nextPhase);
+    if (nextPhase !== "PERFORMANCE") setIsPlaying(false);
+  };
 
   const handleReset = () => {
     setIsPlaying(false);
     setElapsedTime(0);
     setStageState(initialStageState);
+    setPhase("SETTING");
   };
 
-  // 【追加】中割幕ボタンが押された時の処理
-  const handleCurtainAction = (action: "開" | "閉" | "S") => {
-    console.log(
-      `[CUE] 中割幕操作: ${action} (Time: ${(elapsedTime / 1000).toFixed(3)}s)`,
-    );
-
+  const triggerCurtain = (
+    target: "curtainMain" | "curtainMiddle" | "curtainBack",
+    action: "開" | "閉" | "S",
+  ) => {
     setStageState((prev) => {
-      let nextCurtain: StageState["curtain"] = prev.curtain;
-      let nextHorizone = prev.horizone;
-
-      if (action === "開") {
-        nextCurtain = "open";
-        nextHorizone = true; // 仕様書より：中割幕【開】/ ホリゾント点灯
-      } else if (action === "閉") {
-        nextCurtain = "closed";
-      } else if (action === "S") {
-        nextCurtain = "stopped";
-      }
-
-      return { ...prev, curtain: nextCurtain, horizone: nextHorizone };
+      const curtain = prev[target];
+      let stat = curtain.status;
+      if (action === "開") stat = "opening";
+      if (action === "閉") stat = "closing";
+      if (action === "S") stat = "stopped";
+      return { ...prev, [target]: { ...curtain, status: stat } };
     });
   };
 
-  // 【追加】小迫りボタンが押された時の処理
-  const handleKoseriAction = (action: "昇" | "降" | "S") => {
-    console.log(
-      `[CUE] 小迫り操作: ${action} (Time: ${(elapsedTime / 1000).toFixed(3)}s)`,
-    );
-
-    setStageState((prev) => {
-      let nextKoseri: StageState["koseri"] = prev.koseri;
-
-      if (action === "昇") nextKoseri = "up";
-      if (action === "降") nextKoseri = "down";
-      if (action === "S") nextKoseri = "stopped";
-
-      return { ...prev, koseri: nextKoseri };
-    });
-  };
-
-  // 【追加】演出同期 GO ボタンが押された時の処理
-  const handleSynchroGO = () => {
-    console.log(
-      `[CUE] 音響・照明 GO! (Time: ${(elapsedTime / 1000).toFixed(3)}s)`,
-    );
-
+  const changeCurtainSpeed = (
+    target: "curtainMain" | "curtainMiddle" | "curtainBack",
+    speed: number,
+  ) => {
     setStageState((prev) => ({
       ...prev,
-      actorPresent:
-        prev.actorPresent === "on-stage" ? "haked" : prev.actorPresent,
+      [target]: { ...prev[target], speedDial: speed },
+    }));
+  };
+
+  const triggerKoseri = (namedPos: "+450" | "舞台" | "ぬすみ" | "奈落") => {
+    setStageState((prev) => {
+      const current = prev.koseri.currentHeight;
+      let target = current;
+      if (namedPos === "+450") target = 450;
+      if (namedPos === "舞台") target = 0;
+      if (namedPos === "ぬすみ") target = -50;
+      if (namedPos === "奈落") target = -4000;
+      const stat =
+        target > current ? "rising" : target < current ? "falling" : "stopped";
+      return {
+        ...prev,
+        koseri: { ...prev.koseri, targetNamedPosition: namedPos, status: stat },
+      };
+    });
+  };
+
+  const stopKoseri = () => {
+    setStageState((prev) => ({
+      ...prev,
+      koseri: {
+        ...prev.koseri,
+        status: "stopped",
+        targetNamedPosition: "none",
+      },
     }));
   };
 
   return (
     <div
       style={{
-        padding: "20px",
+        padding: "15px",
         backgroundColor: "#111",
         color: "#fff",
         minHeight: "100vh",
         fontFamily: "monospace",
       }}
     >
-      <h2
-        style={{
-          borderBottom: "1px solid #333",
-          paddingBottom: "10px",
-          color: "#00ffcc",
-        }}
-      >
-        【主制御盤】TheaterMaster (親)
-      </h2>
-
+      {/* 興行進行管理マネージャー UI */}
       <div
         style={{
-          marginBottom: "20px",
-          padding: "15px",
+          padding: "12px",
           backgroundColor: "#222",
           borderRadius: "4px",
+          borderLeft: "5px solid #00ffcc",
+          marginBottom: "15px",
         }}
       >
-        <button
-          onClick={() => setIsPlaying(!isPlaying)}
+        <h3 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#00ffcc" }}>
+          📋 興行進行タイムライン（フェーズ切替）
+        </h3>
+        <div
           style={{
-            marginRight: "10px",
-            padding: "10px 20px",
-            backgroundColor: isPlaying ? "#ff3333" : "#33cc33",
-            color: "#fff",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: "bold",
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
+            marginBottom: "10px",
           }}
         >
-          {isPlaying ? "PAUSE (一時停止)" : "RUN (演目スタート)"}
-        </button>
-        <button
-          onClick={handleReset}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#555",
-            color: "#fff",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          RESET (リセット)
-        </button>
+          {(
+            [
+              "SETTING",
+              "DOORS_OPEN",
+              "PERFORMANCE",
+              "INTERMISSION",
+              "POST_SHOW",
+              "EXIT",
+            ] as StagePhase[]
+          ).map((p) => (
+            <button
+              key={p}
+              onClick={() => handlePhaseChange(p)}
+              style={{
+                padding: "6px 10px",
+                fontSize: "11px",
+                fontWeight: "bold",
+                backgroundColor: phase === p ? "#00ffcc" : "#333",
+                color: phase === p ? "#000" : "#ccc",
+                border: "none",
+                borderRadius: "3px",
+                cursor: "pointer",
+              }}
+            >
+              {p === "SETTING" && "1.仕込み(SETTING)"}
+              {p === "DOORS_OPEN" && "2.開場(客入れ)"}
+              {p === "PERFORMANCE" && "3.本番(PERFORMANCE)"}
+              {p === "INTERMISSION" && "4.幕間(転換)"}
+              {p === "POST_SHOW" && "5.終演(バラシ)"}
+              {p === "EXIT" && "6.客だし"}
+            </button>
+          ))}
+          <button
+            onClick={handleReset}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#555",
+              border: "none",
+              borderRadius: "3px",
+              cursor: "pointer",
+              marginLeft: "auto",
+            }}
+          >
+            RESET
+          </button>
+        </div>
+
+        {phase === "PERFORMANCE" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "15px",
+              backgroundColor: "#111",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #ff3333",
+            }}
+          >
+            <span
+              style={{ color: "#ff3333", fontWeight: "bold", fontSize: "11px" }}
+            >
+              ⚠️ 本番タイムライン駆動：
+            </span>
+            <button
+              onClick={() => setIsPlaying(!isPlaying)}
+              style={{
+                padding: "6px 15px",
+                backgroundColor: isPlaying ? "#ff3333" : "#33cc33",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                fontWeight: "bold",
+                borderRadius: "3px",
+                fontSize: "11px",
+              }}
+            >
+              {isPlaying
+                ? "⏱ STOPWATCH PAUSE"
+                : "🚀 開演ブザー ➔ タイマースタート"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* モニターセクション */}
+      {/* モニター配置セクション */}
       <div
         style={{
           display: "flex",
-          gap: "20px",
+          gap: "15px",
           flexWrap: "wrap",
-          marginBottom: "20px",
+          marginBottom: "15px",
         }}
       >
-        <div>
-          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-            ⏱ 調整室モニター（子）
-          </h3>
-          <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
-        </div>
-
-        <div style={{ flex: "1", minWidth: "300px" }}>
-          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-            🎬 舞台目視モニター（子）
-          </h3>
-          <StageMonitor stageState={stageState} />
-        </div>
-      </div>
-
-      {/* 【追加】操作盤盤面セクション */}
-      <div style={{ marginBottom: "30px" }}>
-        <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-          🎛 下手舞台袖操作盤（子）
-        </h3>
-        <OperatorConsole
-          onCurtainAction={handleCurtainAction}
-          onKoseriAction={handleKoseriAction}
-          onSynchroGO={handleSynchroGO}
+        <SeikoClock
+          elapsedTime={elapsedTime}
+          isPlaying={isPlaying && phase === "PERFORMANCE"}
         />
+        <div style={{ flex: "1", minWidth: "320px" }}>
+          <StageMonitor
+            stageState={stageState}
+            mainCurtainMode={mainCurtainMode}
+          />
+        </div>
       </div>
 
+      {/* コクピットセクション */}
+      <div
+        style={{
+          display: "flex",
+          gap: "15px",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: "1", minWidth: "400px" }}>
+          <OperatorConsole
+            stageState={stageState}
+            phase={phase}
+            mainCurtainMode={mainCurtainMode}
+            onMainCurtainModeChange={setMainCurtainMode}
+            onCurtainAction={triggerCurtain}
+            onCurtainSpeedChange={changeCurtainSpeed}
+            onKoseriAction={triggerKoseri}
+            onKoseriStop={stopKoseri}
+          />
+        </div>
+        <NarakuMonitor stageState={stageState} />
+      </div>
+
+      {/* 数値デバッグカウンター */}
       <div
         style={{
           borderTop: "1px solid #333",
-          paddingTop: "20px",
+          paddingTop: "15px",
           fontSize: "12px",
-          color: "#888",
+          color: "#00ff00",
+          lineHeight: "1.5",
+          marginTop: "15px",
         }}
       >
-        <h3>🔍 デバッグモニター</h3>
-        <p>現在の舞台機構状態: {JSON.stringify(stageState)}</p>
-        <p>読み込み済みの総キュー数: {timeline.length} 個</p>
+        <div>
+          🎬 緞帳: {stageState.curtainMain.position.toFixed(1)}% | 中割:{" "}
+          {stageState.curtainMiddle.position.toFixed(1)}% | 引割:{" "}
+          {stageState.curtainBack.position.toFixed(1)}% | 🏗 迫り:{" "}
+          {Math.round(stageState.koseri.currentHeight)}mm
+        </div>
+        <div style={{ color: "#666", fontSize: "11px", marginTop: "4px" }}>
+          📁 総演出キュー数: {timelineData.length} 個 | System確認:{" "}
+          {typeof changeCurtainSpeed}
+        </div>
       </div>
     </div>
   );

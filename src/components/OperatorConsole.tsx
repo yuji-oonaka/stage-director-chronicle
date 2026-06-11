@@ -1,177 +1,155 @@
+// components/OperatorConsole.tsx
 import React from "react";
+import type { StageState, StagePhase } from "../types/theater";
+import { KoseriColumn } from "./console/KoseriColumn";
+import { CurtainColumn } from "./console/CurtainColumn";
+import { AccessoryColumn } from "./console/AccessoryColumn";
 
 interface OperatorConsoleProps {
-  onCurtainAction: (action: "開" | "閉" | "S") => void;
-  onKoseriAction: (action: "昇" | "降" | "S") => void;
-  onSynchroGO: () => void; // 音響・照明のGOキュー用
+  stageState: StageState;
+  phase: StagePhase;
+  mainCurtainMode: "vertical" | "horizontal";
+  onMainCurtainModeChange: (mode: "vertical" | "horizontal") => void;
+  onCurtainAction: (
+    target: "curtainMain" | "curtainMiddle" | "curtainBack",
+    action: "開" | "閉" | "S",
+  ) => void;
+  onCurtainSpeedChange: (
+    target: "curtainMain" | "curtainMiddle" | "curtainBack",
+    speed: number,
+  ) => void;
+  onKoseriAction: (namedPos: "+450" | "舞台" | "ぬすみ" | "奈落") => void;
+  onKoseriStop: () => void;
 }
 
 export const OperatorConsole: React.FC<OperatorConsoleProps> = ({
+  stageState,
+  phase,
+  mainCurtainMode,
+  onMainCurtainModeChange,
   onCurtainAction,
+  onCurtainSpeedChange,
   onKoseriAction,
-  onSynchroGO,
+  onKoseriStop,
 }) => {
-  // 工業用ボタンの共通スタイル
-  const buttonStyle = (bgColor: string) => ({
-    padding: "12px 24px",
-    fontSize: "16px",
-    fontWeight: "bold" as const,
-    color: "#fff",
-    backgroundColor: bgColor,
-    border: "3px solid #333",
-    borderBottomColor: "#111",
-    borderRightColor: "#111",
-    borderRadius: "4px",
-    cursor: "pointer",
-    boxShadow: "2px 2px 5px rgba(0,0,0,0.5)",
-    active: {
-      transform: "translateY(2px)",
-      boxShadow: "none",
-    },
-  });
+  const { curtainMain, curtainMiddle, curtainBack, koseri } = stageState;
 
   return (
     <div
       style={{
-        backgroundColor: "#3a3d40", // 工業製品っぽいグレー
-        border: "4px solid #222",
-        borderRadius: "6px",
-        padding: "20px",
+        backgroundColor: "#1c1d1f",
+        border: "5px solid #2d2f31",
+        borderRadius: "4px",
+        padding: "25px",
         width: "100%",
-        maxWidth: "600px",
-        boxShadow: "0 10px 20px rgba(0,0,0,0.6)",
-        fontFamily: "sans-serif",
+        maxWidth: "850px",
+        boxShadow: "0 15px 35px rgba(0,0,0,0.8)",
+        fontFamily: '"MS Gothic", "Osaka", monospace',
+        color: "#fff",
       }}
     >
+      {/* 操作盤ヘッダーロゴ */}
       <div
         style={{
-          color: "#ccc",
-          fontSize: "11px",
-          marginBottom: "15px",
-          borderBottom: "2px solid #222",
-          paddingBottom: "5px",
-          fontWeight: "bold",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderBottom: "2px solid #000",
+          paddingBottom: "8px",
+          marginBottom: "20px",
         }}
       >
-        三研工業型 機構操作盤 (OPERATOR CONSOLE)
+        <div
+          style={{
+            fontSize: "14px",
+            fontWeight: "bold",
+            letterSpacing: "2px",
+            color: "#aaa",
+          }}
+        >
+          Sankei ENGINEERING{" "}
+          <span style={{ fontSize: "10px", color: "#666" }}>
+            PLC-CONTROL SYSTEM
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ fontSize: "9px", color: "#666", textAlign: "center" }}>
+            <div
+              style={{
+                width: "25px",
+                height: "10px",
+                backgroundColor: "#1d4225",
+                border: "1px solid #000",
+                margin: "0 auto 2px",
+              }}
+            />
+            電源
+          </div>
+          <div style={{ fontSize: "9px", color: "#666", textAlign: "center" }}>
+            <div
+              style={{
+                width: "25px",
+                height: "10px",
+                backgroundColor: "#5e1919",
+                border: "1px solid #000",
+                margin: "0 auto 2px",
+              }}
+            />
+            PLC異常
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {/* 中割幕セクション */}
-        <div
-          style={{
-            backgroundColor: "#2b2d2f",
-            padding: "12px",
-            borderRadius: "4px",
-            border: "1px solid #555",
-          }}
-        >
-          <div
-            style={{
-              color: "#fff",
-              fontSize: "13px",
-              marginBottom: "10px",
-              fontWeight: "bold",
-            }}
-          >
-            ■ 中割幕操作 (STAGE CURTAIN)
-          </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => onCurtainAction("開")}
-              style={buttonStyle("#28a745")}
-            >
-              開 (OPEN)
-            </button>
-            <button
-              onClick={() => onCurtainAction("閉")}
-              style={buttonStyle("#dc3545")}
-            >
-              閉 (CLOSE)
-            </button>
-            <button
-              onClick={() => onCurtainAction("S")}
-              style={buttonStyle("#ffc107")}
-            >
-              S (STOP)
-            </button>
-          </div>
-        </div>
+      {/* メイン操作マトリクス */}
+      <div
+        style={{
+          display: "flex",
+          gap: "15px",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        {/* COLUMN 1: 小迫り（セリ）列 */}
+        <KoseriColumn
+          koseri={koseri}
+          onKoseriAction={onKoseriAction}
+          onKoseriStop={onKoseriStop}
+        />
 
-        {/* 小迫りセクション */}
-        <div
-          style={{
-            backgroundColor: "#2b2d2f",
-            padding: "12px",
-            borderRadius: "4px",
-            border: "1px solid #555",
-          }}
-        >
-          <div
-            style={{
-              color: "#fff",
-              fontSize: "13px",
-              marginBottom: "10px",
-              fontWeight: "bold",
-            }}
-          >
-            ■ 小迫り昇降 (STAGE ELEVATOR)
-          </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => onKoseriAction("昇")}
-              style={buttonStyle("#007bff")}
-            >
-              昇 (UP)
-            </button>
-            <button
-              onClick={() => onKoseriAction("降")}
-              style={buttonStyle("#6c757d")}
-            >
-              降 (DOWN)
-            </button>
-            <button
-              onClick={() => onKoseriAction("S")}
-              style={buttonStyle("#ffc107")}
-            >
-              S (STOP)
-            </button>
-          </div>
-        </div>
+        {/* COLUMN 2: 緞帳 列 */}
+        <CurtainColumn
+          title="緞帳"
+          target="curtainMain"
+          state={curtainMain}
+          onCurtainAction={onCurtainAction}
+          onCurtainSpeedChange={onCurtainSpeedChange}
+        />
 
-        {/* 音響・照明同期 GO ボタン */}
-        <div
-          style={{
-            backgroundColor: "#2b2d2f",
-            padding: "12px",
-            borderRadius: "4px",
-            border: "1px solid #555",
-          }}
-        >
-          <div
-            style={{
-              color: "#fff",
-              fontSize: "13px",
-              marginBottom: "10px",
-              fontWeight: "bold",
-            }}
-          >
-            ■ 演出同期 (CUE SYSTEM)
-          </div>
-          <button
-            onClick={onSynchroGO}
-            style={{
-              ...buttonStyle("#e0a800"),
-              color: "#000",
-              width: "100%",
-              fontSize: "20px",
-              padding: "15px",
-              border: "4px solid #ad8100",
-            }}
-          >
-            🔴 GO
-          </button>
-        </div>
+        {/* COLUMN 3: 中割幕 列 */}
+        <CurtainColumn
+          title="中割幕"
+          target="curtainMiddle"
+          state={curtainMiddle}
+          onCurtainAction={onCurtainAction}
+          onCurtainSpeedChange={onCurtainSpeedChange}
+        />
+
+        {/* COLUMN 4: 引割幕 列 */}
+        <CurtainColumn
+          title="引割幕"
+          target="curtainBack"
+          state={curtainBack}
+          onCurtainAction={onCurtainAction}
+          onCurtainSpeedChange={onCurtainSpeedChange}
+        />
+
+        {/* COLUMN 5: アクセサリ・スペック設定枠 */}
+        <AccessoryColumn
+          phase={phase}
+          curtainMain={curtainMain}
+          mainCurtainMode={mainCurtainMode}
+          onMainCurtainModeChange={onMainCurtainModeChange}
+        />
       </div>
     </div>
   );

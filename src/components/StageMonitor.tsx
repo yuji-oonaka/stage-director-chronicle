@@ -1,182 +1,211 @@
+// components/StageMonitor.tsx
 import React from "react";
 import type { StageState } from "../types/theater";
+import { MainCurtain } from "./stage/MainCurtain";
+import { MiddleCurtain } from "./stage/MiddleCurtain";
+import { BackCurtain } from "./stage/BackCurtain";
+import { Koseri } from "./stage/Koseri";
+import { TikkouDots } from "./stage/TikkouDots";
 
 interface StageMonitorProps {
   stageState: StageState;
+  mainCurtainMode: "vertical" | "horizontal";
 }
 
-export const StageMonitor: React.FC<StageMonitorProps> = ({ stageState }) => {
-  const { curtain, koseri, horizone, actorPresent } = stageState;
+export const StageMonitor: React.FC<StageMonitorProps> = ({
+  stageState,
+  mainCurtainMode,
+}) => {
+  const {
+    curtainMain,
+    koseri,
+    curtainMiddle,
+    curtainBack,
+    horizone,
+    actorPresent,
+  } = stageState;
 
-  // ホリゾント（最背面）の背景色決定
-  const horizoneBg = horizone ? "#0055ff" : "#050505"; // 点灯時は鮮やかな舞台ブルー、消灯時は漆黒
-
-  // 中割幕（カーテン）の幅をステートから簡易決定（開閉アニメーションの土台）
-  // 本格アニメーションは後ほど実装するため、まずはステートに応じた見た目の切り替え
-  const isCurtainOpen = curtain === "open" || curtain === "opening";
+  const horizoneBg = horizone.active
+    ? "linear-gradient(to bottom, #1a66ff 0%, #ffb366 70%, #ffffff 100%)"
+    : "#111";
 
   return (
     <div
       style={{
+        display: "flex",
+        gap: "15px",
+        alignItems: "flex-start",
+        maxWidth: "820px",
         width: "100%",
-        maxWidth: "600px",
-        height: "300px",
-        backgroundColor: "#000",
-        border: "3px solid #555",
-        position: "relative",
-        overflow: "hidden",
-        borderRadius: "4px",
-        boxShadow: "inset 0 0 20px rgba(0,0,0,1)",
       }}
     >
-      {/* 画面ラベル */}
+      {/* 🎬 MAIN PORT 1: 本舞台目視モニター */}
       <div
         style={{
-          position: "absolute",
-          top: "5px",
-          left: "5px",
-          color: "#666",
-          fontSize: "10px",
-          zIndex: 10,
+          flex: 1,
+          height: "380px",
+          backgroundColor: "#020202",
+          border: "4px solid #222",
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: "6px",
+          boxShadow: "inset 0 0 40px rgba(0,0,0,1)",
+          fontFamily: "monospace",
+          perspective: "500px",
         }}
       >
-        [STAGE MONITOR - QL5 VIEW]
-      </div>
-
-      {/* 1. 【奥 / z-index: 1】ホリゾント幕 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: horizoneBg,
-          transition: "background-color 0.5s ease",
-          zIndex: 1,
-        }}
-      />
-
-      {/* 2. 【中二 / z-index: 2】小迫り ＆ 役者 */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "20px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 2,
-          textAlign: "center",
-          transition: "all 0.8s ease",
-        }}
-      >
-        {/* 役者グラフィック（ファミコン風テキスト表現） */}
-        {actorPresent === "on-stage" && (
-          <div
-            style={{
-              color: "#fff",
-              fontSize: "24px",
-              marginBottom: "5px",
-              textShadow: "0 0 5px #fff",
-              animation: "bounce 0.5s infinite alternate",
-            }}
-          >
-            🕺【役者】
-          </div>
-        )}
-        {actorPresent === "haked" && (
-          <div
-            style={{ color: "#ff3333", fontSize: "12px", marginBottom: "5px" }}
-          >
-            ➔ ハケ完了
-          </div>
-        )}
-
-        {/* 小迫り（ステージの昇降床） */}
         <div
           style={{
-            width: "120px",
-            height: koseri === "up" || koseri === "rising" ? "40px" : "10px",
-            backgroundColor: "#333",
-            border: "2px solid #666",
-            borderRadius: "3px",
-            color: "#888",
+            position: "absolute",
+            top: "8px",
+            left: "8px",
+            color: "#666",
             fontSize: "10px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "height 0.5s ease-in-out",
-            boxShadow: "0 4px 10px rgba(0,0,0,0.5)",
+            zIndex: 100,
+            pointerEvents: "none",
           }}
         >
-          小迫り ({koseri.toUpperCase()})
+          [STAGE 3D MONITOR - QL5 VIEW]
+        </div>
+
+        {/* LAYER 1: 最奥ホリゾント幕 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "240px",
+            background: horizoneBg,
+            transition: "background 0.5s ease",
+            zIndex: 1,
+          }}
+        />
+
+        {/* LAYER 2: 渡り高台 */}
+        <div
+          style={{
+            position: "absolute",
+            top: "140px",
+            left: 0,
+            right: 0,
+            height: "20px",
+            zIndex: 2,
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "16px",
+              background: "linear-gradient(to bottom, #ffffff, #dcdcdc)",
+              borderBottom: "2px solid #555",
+            }}
+          />
+        </div>
+
+        {/* LAYER 3: 階段幕（引割） */}
+        <BackCurtain position={curtainBack.position} />
+
+        {/* LAYER 4: 全面ワイド大階段 */}
+        <div
+          style={{
+            position: "absolute",
+            top: "156px",
+            left: 0,
+            right: 0,
+            height: "100px",
+            zIndex: 4,
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {[14, 16, 18, 20].map((h, i) => (
+              <div
+                key={i}
+                style={{
+                  height: `${h}px`,
+                  background:
+                    "linear-gradient(to bottom, #ffffff 0%, #d8d8d8 30%, #666 35%, #1a1a1a 100%)",
+                  borderTop: "1px solid #fff",
+                  borderBottom: "1px solid #222",
+                  boxShadow: "0 4px 6px rgba(0,0,0,0.5)",
+                  zIndex: i,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* LAYER 5: 中割幕 */}
+        <MiddleCurtain position={curtainMiddle.position} />
+
+        {/* LAYER 6: 本舞台の光沢床面 */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "20px",
+            left: "-50px",
+            right: "-50px",
+            height: "140px",
+            background:
+              "linear-gradient(to bottom, #e5e5e5 0%, #f9f9f9 25%, #c0c0c0 100%)",
+            borderTop: "3px solid #fff",
+            zIndex: 10,
+            transform: "rotateX(25deg)",
+            transformOrigin: "top center",
+            boxShadow: "0 -10px 20px rgba(0,0,0,0.6)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <TikkouDots />
+
+        {/* LAYER 7: 小迫りユニット（奈落大穴・昇降台座・役者を含む） */}
+        <Koseri
+          currentHeight={koseri.currentHeight}
+          targetNamedPosition={koseri.targetNamedPosition}
+          actorPresent={actorPresent}
+        />
+
+        {/* LAYER 20: 最手前・上下緞帳 */}
+        <MainCurtain position={curtainMain.position} mode={mainCurtainMode} />
+
+        {/* LAYER 30: YAMAHA QL5 メーターフレーム */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "22px",
+            backgroundColor: "#111315",
+            borderTop: "2px solid #2d3135",
+            zIndex: 30,
+            display: "flex",
+            alignItems: "center",
+            paddingLeft: "10px",
+            color: "#777",
+            fontSize: "9px",
+            fontWeight: "bold",
+            letterSpacing: "1px",
+          }}
+        >
+          YAMAHA QL5 CLOCK SYNC [OK]
         </div>
       </div>
-
-      {/* 3. 【中一 / z-index: 3】中割幕（左右に開閉する舞台幕） */}
-      {/* 左幕 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: isCurtainOpen ? "10%" : "50%",
-          height: "100%",
-          backgroundColor: "#800000", // 深紅のベロアをイメージ
-          borderRight: "2px solid #4a0000",
-          transition: "width 1.5s ease-in-out",
-          zIndex: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          color: "rgba(255,255,255,0.2)",
-          fontSize: "12px",
-        }}
-      >
-        {curtain === "closed" && "幕"}
-      </div>
-      {/* 右幕 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          width: isCurtainOpen ? "10%" : "50%",
-          height: "100%",
-          backgroundColor: "#800000",
-          borderLeft: "2px solid #4a0000",
-          transition: "width 1.5s ease-in-out",
-          zIndex: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          color: "rgba(255,255,255,0.2)",
-          fontSize: "12px",
-        }}
-      >
-        {curtain === "closed" && "幕"}
-      </div>
-
-      {/* 4. 【手前 / z-index: 4】固定の緞帳（フレーム表現） */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "15px",
-          backgroundColor: "#4a0000",
-          zIndex: 4,
-          boxShadow: "0 2px 5px rgba(0,0,0,0.5)",
-        }}
-      />
-
-      {/* CSSの簡易バウンスアニメーションを埋め込み */}
-      <style>{`
-        @keyframes bounce {
-          from { transform: translateY(0); }
-          to { transform: translateY(-5px); }
-        }
-      `}</style>
     </div>
   );
 };
