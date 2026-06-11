@@ -1,142 +1,90 @@
+// components/TheaterMaster.tsx
 import { useState, useEffect, useRef } from "react";
-// KoseriState をインポートから削除
-import type { StageState, TimelineEvent, CurtainState } from "../types/theater";
+import type { StageState, CurtainState, StagePhase } from "../types/theater";
 import timelineData from "../data/timeline.json";
 import { SeikoClock } from "./SeikoClock";
 import { StageMonitor } from "./StageMonitor";
 import { OperatorConsole } from "./OperatorConsole";
+import { NarakuMonitor } from "./NarakuMonitor";
+import { calculateNextStageState } from "../utils/stagePhysics"; // 上記の物理関数をインポート
 
-// 幕の初期状態を生成するヘルパー
-const createInitialCurtain = (): CurtainState => ({
-  position: 0, // 0: 全閉、100: 全開
-  status: "closed",
-  speedDial: 50, // 写真のダイヤル初期値を意識して50%スタート
+const createDefaultCurtain = (): CurtainState => ({
+  position: 100,
+  status: "open",
+  speedDial: 100,
 });
 
-// 新・舞台初期状態（本物の構造レイヤーを完全網羅）
 const initialStageState: StageState = {
-  curtainMain: createInitialCurtain(), // 1. 緞帳
-  koseri: {
-    // 2. 小迫り
-    currentHeight: -1000, // 奈落（地下1000mm）に沈んでいる状態スタート
-    status: "down",
-    targetNamedPosition: "奈落",
-  },
-  curtainMiddle: createInitialCurtain(), // 3. 中割幕
-  curtainBack: createInitialCurtain(), // 4. 引割緞帳（渡りの引き割幕）
-  horizone: { active: false, color: "#050505" },
+  curtainMain: createDefaultCurtain(),
+  koseri: { currentHeight: 0, status: "stopped", targetNamedPosition: "舞台" },
+  curtainMiddle: createDefaultCurtain(),
+  curtainBack: createDefaultCurtain(),
+  horizone: { active: true, color: "#ffffff" },
   actorPresent: "none",
 };
 
-// シミュレーション用の基準速度設定
-const CURTAIN_BASE_SPEED = 0.01; // 100%速度のとき、1msあたりに動く幕の％量
-const KOSERI_SPEED = 0.3; // 1msあたりに昇降するミリメートル（mm）
-
 export const TheaterMaster: React.FC = () => {
+  const [phase, setPhase] = useState<StagePhase>("SETTING");
+  const [mainCurtainMode, setMainCurtainMode] = useState<
+    "vertical" | "horizontal"
+  >("vertical");
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [stageState, setStageState] = useState<StageState>(initialStageState);
+  
 
+  // 精密タイマーのための参照系オブジェクト（rAFループを一度も壊さないための防壁）
   const requestRef = useRef<number | null>(null);
   const previousTimeRef = useRef<number | null>(null);
-  const timeline: TimelineEvent[] = timelineData as TimelineEvent[];
 
-  // 毎フレーム呼ばれる高精度シミュレーション関数
-  const animate = (time: number) => {
-    if (previousTimeRef.current !== null) {
-      const deltaTime = time - previousTimeRef.current;
-      setElapsedTime((prevTime) => prevTime + deltaTime);
-
-      // --- 物理数値のリアルタイム計算処理 ---
-      setStageState((prev) => {
-        const next = { ...prev };
-
-        // 1. 各種幕（緞帳、中割、引割）のシミュレーション計算
-        const updateCurtain = (curtain: CurtainState): CurtainState => {
-          let pos = curtain.position;
-          let stat = curtain.status;
-          // ダイヤル速度(%)に応じた実際の移動速度
-          const speed =
-            deltaTime * CURTAIN_BASE_SPEED * (curtain.speedDial / 100);
-
-          if (stat === "opening") {
-            pos += speed;
-            if (pos >= 100) {
-              pos = 100;
-              stat = "open";
-            }
-          } else if (stat === "closing") {
-            pos -= speed;
-            if (pos <= 0) {
-              pos = 0;
-              stat = "closed";
-            }
-          }
-          return { ...curtain, position: pos, status: stat };
-        };
-
-        next.curtainMain = updateCurtain(next.curtainMain);
-        next.curtainMiddle = updateCurtain(next.curtainMiddle);
-        next.curtainBack = updateCurtain(next.curtainBack);
-
-        // 2. 小迫り（セリ）の無段階・目標値ターゲット昇降計算
-        let kHeight = next.koseri.currentHeight;
-        let kStatus = next.koseri.status;
-        let targetHeight = kHeight;
-
-        // ボタンから指定された名前ベースの目標ミリ数を割り出す
-        if (next.koseri.targetNamedPosition === "+450") targetHeight = 450;
-        if (next.koseri.targetNamedPosition === "舞台") targetHeight = 0;
-        if (next.koseri.targetNamedPosition === "ぬすみ") targetHeight = -50;
-        if (next.koseri.targetNamedPosition === "奈落") targetHeight = -1000;
-
-        if (kStatus === "rising") {
-          kHeight += deltaTime * KOSERI_SPEED;
-          if (kHeight >= targetHeight) {
-            kHeight = targetHeight;
-            kStatus = kHeight === 450 ? "up" : "stopped";
-          }
-        } else if (kStatus === "falling") {
-          kHeight -= deltaTime * KOSERI_SPEED;
-          if (kHeight <= targetHeight) {
-            kHeight = targetHeight;
-            kStatus = kHeight === -1000 ? "down" : "stopped";
-          }
-        }
-
-        next.koseri = {
-          ...next.koseri,
-          currentHeight: kHeight,
-          status: kStatus,
-        };
-
-        return next;
-      });
-    }
-    previousTimeRef.current = time;
-    requestRef.current = requestAnimationFrame(animate);
-  };
+  // 常に最新のReact状態をrAFループ内にノータイムで中継するためのRef
+  const loopStateRef = useRef({ phase, isPlaying });
+  loopStateRef.current = { phase, isPlaying };
 
   useEffect(() => {
-    if (isPlaying) {
+    const animate = (time: number) => {
+      if (previousTimeRef.current !== null) {
+        const deltaTime = time - previousTimeRef.current;
+        const current = loopStateRef.current;
+
+        // 本番中かつ再生中のみ、ストップウォッチの時間を進める
+        if (current.phase === "PERFORMANCE" && current.isPlaying) {
+          setElapsedTime((prev) => prev + deltaTime);
+        }
+
+        // 外部に隔離したピュアな物理演算関数を呼び出し、必要なときだけStateを更新する
+        setStageState((prev) => {
+          const { nextState, isChanged } = calculateNextStageState(
+            prev,
+            deltaTime,
+          );
+          return isChanged ? nextState : prev;
+        });
+      }
+      previousTimeRef.current = time;
       requestRef.current = requestAnimationFrame(animate);
-    } else {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      previousTimeRef.current = null;
-    }
+    };
+
+    // 初回マウント時に「一度だけ」ループを起動。これ以降、フェーズ変更等でループは絶対に壊れない
+    requestRef.current = requestAnimationFrame(animate);
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying]);
+  }, []); // 依存配列は空！不滅のタイマーループ
+
+  // --- 進行管理・操作盤からのイベントハンドラー（変更なし） ---
+  const handlePhaseChange = (nextPhase: StagePhase) => {
+    setPhase(nextPhase);
+    if (nextPhase !== "PERFORMANCE") setIsPlaying(false);
+  };
 
   const handleReset = () => {
     setIsPlaying(false);
     setElapsedTime(0);
     setStageState(initialStageState);
+    setPhase("SETTING");
   };
 
-  // --- 【新規】実物写真ボタンを模した仮のイベントハンドラー群 ---
-  // 幕の操作（引割幕・中割幕・引割緞帳を一括で処理できる汎用関数）
   const triggerCurtain = (
     target: "curtainMain" | "curtainMiddle" | "curtainBack",
     action: "開" | "閉" | "S",
@@ -151,7 +99,6 @@ export const TheaterMaster: React.FC = () => {
     });
   };
 
-  // 幕の速度ダイヤル変更（％変更）
   const changeCurtainSpeed = (
     target: "curtainMain" | "curtainMiddle" | "curtainBack",
     speed: number,
@@ -162,7 +109,6 @@ export const TheaterMaster: React.FC = () => {
     }));
   };
 
-  // 小迫りの目標位置指定操作（+450、舞台、ぬすみ、奈落）
   const triggerKoseri = (namedPos: "+450" | "舞台" | "ぬすみ" | "奈落") => {
     setStageState((prev) => {
       const current = prev.koseri.currentHeight;
@@ -170,8 +116,7 @@ export const TheaterMaster: React.FC = () => {
       if (namedPos === "+450") target = 450;
       if (namedPos === "舞台") target = 0;
       if (namedPos === "ぬすみ") target = -50;
-      if (namedPos === "奈落") target = -1000;
-
+      if (namedPos === "奈落") target = -4000;
       const stat =
         target > current ? "rising" : target < current ? "falling" : "stopped";
       return {
@@ -181,7 +126,6 @@ export const TheaterMaster: React.FC = () => {
     });
   };
 
-  // 小迫りの緊急ストップ
   const stopKoseri = () => {
     setStageState((prev) => ({
       ...prev,
@@ -196,132 +140,184 @@ export const TheaterMaster: React.FC = () => {
   return (
     <div
       style={{
-        padding: "20px",
+        padding: "15px",
         backgroundColor: "#111",
         color: "#fff",
         minHeight: "100vh",
         fontFamily: "monospace",
       }}
     >
-      <h2
-        style={{
-          borderBottom: "1px solid #333",
-          paddingBottom: "10px",
-          color: "#00ffcc",
-        }}
-      >
-        【新主制御盤】TheaterMaster (親)
-      </h2>
-
-      {/* 演目RUN/RESETコンソール */}
+      {/* 興行進行管理マネージャー UI */}
       <div
         style={{
-          marginBottom: "20px",
-          padding: "15px",
+          padding: "12px",
           backgroundColor: "#222",
           borderRadius: "4px",
+          borderLeft: "5px solid #00ffcc",
+          marginBottom: "15px",
         }}
       >
-        <button
-          onClick={() => setIsPlaying(!isPlaying)}
+        <h3 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#00ffcc" }}>
+          📋 興行進行タイムライン（フェーズ切替）
+        </h3>
+        <div
           style={{
-            marginRight: "10px",
-            padding: "10px 20px",
-            backgroundColor: isPlaying ? "#ff3333" : "#33cc33",
-            color: "#fff",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: "bold",
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
+            marginBottom: "10px",
           }}
         >
-          {isPlaying ? "PAUSE (一時停止)" : "RUN (演目スタート)"}
-        </button>
-        <button
-          onClick={handleReset}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#555",
-            color: "#fff",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          RESET (リセット)
-        </button>
+          {(
+            [
+              "SETTING",
+              "DOORS_OPEN",
+              "PERFORMANCE",
+              "INTERMISSION",
+              "POST_SHOW",
+              "EXIT",
+            ] as StagePhase[]
+          ).map((p) => (
+            <button
+              key={p}
+              onClick={() => handlePhaseChange(p)}
+              style={{
+                padding: "6px 10px",
+                fontSize: "11px",
+                fontWeight: "bold",
+                backgroundColor: phase === p ? "#00ffcc" : "#333",
+                color: phase === p ? "#000" : "#ccc",
+                border: "none",
+                borderRadius: "3px",
+                cursor: "pointer",
+              }}
+            >
+              {p === "SETTING" && "1.仕込み(SETTING)"}
+              {p === "DOORS_OPEN" && "2.開場(客入れ)"}
+              {p === "PERFORMANCE" && "3.本番(PERFORMANCE)"}
+              {p === "INTERMISSION" && "4.幕間(転換)"}
+              {p === "POST_SHOW" && "5.終演(バラシ)"}
+              {p === "EXIT" && "6.客だし"}
+            </button>
+          ))}
+          <button
+            onClick={handleReset}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#555",
+              border: "none",
+              borderRadius: "3px",
+              cursor: "pointer",
+              marginLeft: "auto",
+            }}
+          >
+            RESET
+          </button>
+        </div>
+
+        {phase === "PERFORMANCE" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "15px",
+              backgroundColor: "#111",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #ff3333",
+            }}
+          >
+            <span
+              style={{ color: "#ff3333", fontWeight: "bold", fontSize: "11px" }}
+            >
+              ⚠️ 本番タイムライン駆動：
+            </span>
+            <button
+              onClick={() => setIsPlaying(!isPlaying)}
+              style={{
+                padding: "6px 15px",
+                backgroundColor: isPlaying ? "#ff3333" : "#33cc33",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                fontWeight: "bold",
+                borderRadius: "3px",
+                fontSize: "11px",
+              }}
+            >
+              {isPlaying
+                ? "⏱ STOPWATCH PAUSE"
+                : "🚀 開演ブザー ➔ タイマースタート"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* モニターセクション（時計 ＆ 6レイヤー舞台モニター） */}
+      {/* モニター配置セクション */}
       <div
         style={{
           display: "flex",
-          gap: "20px",
+          gap: "15px",
           flexWrap: "wrap",
-          marginBottom: "20px",
+          marginBottom: "15px",
         }}
       >
-        <div>
-          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-            ⏱ 調整室モニター（子）
-          </h3>
-          <SeikoClock elapsedTime={elapsedTime} isPlaying={isPlaying} />
-        </div>
-
-        <div style={{ flex: "1", minWidth: "320px" }}>
-          <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-            🎬 舞台目視モニター（子・6レイヤー仕様）
-          </h3>
-          <StageMonitor stageState={stageState} />
-        </div>
-      </div>
-
-      {/* 【完全結合】リニューアルした三研工業風操作盤 */}
-      <div style={{ marginBottom: "30px" }}>
-        <h3 style={{ fontSize: "14px", color: "#888", marginBottom: "5px" }}>
-          🎛 下手舞台袖操作盤（子・三研工業仕様）
-        </h3>
-        <OperatorConsole
-          stageState={stageState}
-          onCurtainAction={triggerCurtain}
-          onCurtainSpeedChange={changeCurtainSpeed}
-          onKoseriAction={triggerKoseri}
-          onKoseriStop={stopKoseri}
+        <SeikoClock
+          elapsedTime={elapsedTime}
+          isPlaying={isPlaying && phase === "PERFORMANCE"}
         />
+        <div style={{ flex: "1", minWidth: "320px" }}>
+          <StageMonitor
+            stageState={stageState}
+            mainCurtainMode={mainCurtainMode}
+          />
+        </div>
       </div>
 
-      {/* リアルタイム数値デバッグモニター */}
+      {/* コクピットセクション */}
+      <div
+        style={{
+          display: "flex",
+          gap: "15px",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: "1", minWidth: "400px" }}>
+          <OperatorConsole
+            stageState={stageState}
+            phase={phase}
+            mainCurtainMode={mainCurtainMode}
+            onMainCurtainModeChange={setMainCurtainMode}
+            onCurtainAction={triggerCurtain}
+            onCurtainSpeedChange={changeCurtainSpeed}
+            onKoseriAction={triggerKoseri}
+            onKoseriStop={stopKoseri}
+          />
+        </div>
+        <NarakuMonitor stageState={stageState} />
+      </div>
+
+      {/* 数値デバッグカウンター */}
       <div
         style={{
           borderTop: "1px solid #333",
-          paddingTop: "20px",
-          fontSize: "13px",
+          paddingTop: "15px",
+          fontSize: "12px",
           color: "#00ff00",
-          lineHeight: "1.6",
+          lineHeight: "1.5",
+          marginTop: "15px",
         }}
       >
-        <h3>📊 リアルタイム物理挙動データ</h3>
         <div>
-          🎬 緞帳の位置: {stageState.curtainMain.position.toFixed(1)}% (
-          {stageState.curtainMain.status.toUpperCase()})
+          🎬 緞帳: {stageState.curtainMain.position.toFixed(1)}% | 中割:{" "}
+          {stageState.curtainMiddle.position.toFixed(1)}% | 引割:{" "}
+          {stageState.curtainBack.position.toFixed(1)}% | 🏗 迫り:{" "}
+          {Math.round(stageState.koseri.currentHeight)}mm
         </div>
-        <div>
-          🎬 中割幕の位置: {stageState.curtainMiddle.position.toFixed(1)}%
-          (速度: {stageState.curtainMiddle.speedDial}%, 状態:{" "}
-          {stageState.curtainMiddle.status.toUpperCase()})
-        </div>
-        <div>
-          🎬 引割緞帳の位置: {stageState.curtainBack.position.toFixed(1)}% (
-          {stageState.curtainBack.status.toUpperCase()})
-        </div>
-        <div style={{ color: "#ffff00", marginTop: "5px" }}>
-          🏗 小迫りの高さ:{" "}
-          <span style={{ fontSize: "16px", fontWeight: "bold" }}>
-            {Math.round(stageState.koseri.currentHeight)}
-          </span>{" "}
-          mm (状態: {stageState.koseri.status.toUpperCase()}, 目標:{" "}
-          {stageState.koseri.targetNamedPosition})
-        </div>
-        <div style={{ color: "#888", fontSize: "11px", marginTop: "10px" }}>
-          📁 読み込み済みの総演出キュー数: {timeline.length} 個
+        <div style={{ color: "#666", fontSize: "11px", marginTop: "4px" }}>
+          📁 総演出キュー数: {timelineData.length} 個 | System確認:{" "}
+          {typeof changeCurtainSpeed}
         </div>
       </div>
     </div>
