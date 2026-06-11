@@ -1,73 +1,124 @@
-# React + TypeScript + Vite
+これまでの大改修とリファクタリング、そして3D小迫りのフラット同化の大勝利を経て、劇場の開発足回りは最高にクリーンな状態になっています。
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+プロジェクトのルート直下に配置し、新しく参加するエンジニアや未来の自分が一瞬でこのプロジェクトの狂気と美しさを理解できる、圧倒的解像度の `README.md` を作成しました。このままコピペしてプロジェクトのルートに配置してください！
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### ファイル作成
 
-## React Compiler
+* **対象ファイル**: `README.md`
+* **責務**: プロジェクトのコア体験、現在のディレクトリ構造、コンポーネントの責務分離、技術スタック、および開発憲法の明文化。
+* **Gitコミットメッセージ**: `feat: [機能追加] 現在のコンポーネント構造と職人仕様を反映したREADME.mdの追加`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```markdown
+# 『ステージディレクター・クロニクル（仮）』開発マスターリポジトリ
 
-## Expanding the ESLint configuration
+黒背景の舞台袖でSEIKOの電波時計を睨み、インカムからの「3、2、1、ゴー！」の合図や役者の動きに合わせ、ミリ秒単位の精度で機構のキュー（ボタン）を叩く。音・光・機構がステージ上で完璧にシンクロする全能感を味わう、舞台裏方職人シミュレーター。
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+---
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 1. コア設計思想（脳汁ポイント）
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **宣言的UIの徹底遵守**: 生DOM操作（useRef）や個別のアニメーションループは全廃。親の精密タイマーから流れてくるピュアな数値（状態）を各子が受け取って描画する、非常に軽量で堅牢なデータツリー。
+- **一間の隙間（タメ）の再現**: タイミングを合わせるだけの音ゲーではなく、台本のセリフの「間（タメ）」を読み解き、アドリブで機構を操作・緊急停止（S）できる現場の余白をシステムとして担保。
+- **ミリ秒単位のシンクロ判定**: 指定時刻からプレイヤーがボタンを叩いた瞬間のズレ（`+12ms` や `-85ms`）を厳密に評価。
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+---
+
+## 2. ディレクトリ構造とコンポーネントの責務分離
+
+ソースコードは各コンポーネントが「単一の責任」のみを持つよう、完全にカプセル化されています。
+
+```text
+.
+├── docs/
+│   └── PLANNING.md      # 新演目『アストラル・レゾナンス』統合進行・企画設計書
+├── src/
+│   ├── types/
+│   │   └── theater.ts   # すべての基盤となる劇場共通の型定義
+│   ├── data/
+│   │   └── timeline.json # 演目の演出キューデータ（自動進行用）
+│   ├── utils/
+│   │   └── stagePhysics.ts # カーテンやセリのインバーター可変速を計算する純粋関数
+│   ├── components/
+│   │   ├── TheaterMaster.tsx # [主制御盤] requestAnimationFrame(rAF) による精密単一タイマーの駆動
+│   │   ├── SeikoClock.tsx    # SEIKO風デジタルクロック＆ストップウォッチ
+│   │   ├── NarakuMonitor.tsx # 奈落の断面2Dサブモニター（セリ・役者と完全同期）
+│   │   ├── StageMonitor.tsx  # [舞台空間] 各種幕・機構・役者を表示するパースコンテナ
+│   │   │   └── stage/
+│   │   │       ├── MainCurtain.tsx   # 緞帳（縦開き・横開きの可変変形）
+│   │   │       ├── MiddleCurtain.tsx # 中割幕（左右引き割り）
+│   │   │       ├── BackCurtain.tsx   # 引割幕（最奥階段幕）
+│   │   │       ├── Koseri.tsx        # 立体小迫り（0mm時床面完全同化トリック内蔵）＆役者ドッキング
+│   │   │       └── TikkouDots.tsx    # 通り芯パース対応の蓄光マーク（遮蔽レイヤー対応）
+│   │   └── OperatorConsole.tsx # [操作盤] 三研工業製パーツを模したメイン筐体コンテナ
+│   │       └── console/
+│   │           ├── KoseriColumn.tsx  # 小迫り操作用の垂直ボタン列（+450/舞台/ぬすみ/奈落/S）
+│   │           ├── CurtainColumn.tsx # 幕操作用の汎用列（インバーター速度セレクター内蔵）
+│   │           └── AccessoryColumn.tsx # テプラ、鍵、非常停止、仕込み（SETTING）インターロック
+
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 3. 実装済みのこだわり・職人ディテール
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### ① 小迫り（Koseri）の3Dパース ＆ 0mm完全同化トリック
+
+* 外親コンテナに `rotateX(25deg)` の傾斜パースをかけ、内部の小迫り台座と直立する役者（🕺）をカプセル化。
+* 子要素の二重回転バグを修正し、幾何学的に正しい3Dパースペクティブを再現。
+* **同化トリック**: セリが `0mm`（フラット）の瞬間は `background: "transparent"` に切り替わり、周囲のグラデーション床面を100%透過。不自然な黒縁や浮き上がりを完全に排除し、床の細い「切り込み線（目地）」のみを再現。
+* 可動時はパッ！と奈落の大穴（暗黒レイヤー）が開き、`clipPath: inset()` によって大穴の手前フチより下に潜り込んだ部分のみが背景に関わらず完全透明にカットされ、足元からニュルニュルと沈む。
+
+### ② 精密単一タイマー（rAF）とインターロック
+
+* `requestAnimationFrame`（rAF）による中央集権タイマーにより、ブラウザの負荷やタブのバックグラウンド化によるミリ秒のズレを最小化。
+* `AccessoryColumn` には、本番（PERFORMANCE）中や幕の稼働中には駆動方式（縦開き・横開きなど）の誤操作を絶対に受け付けない「安全インターロック（物理ロック）」を完全再現。
+
+---
+
+## 4. 技術スタック
+
+* **フロントエンド**: React (TypeScript) / Vite
+* **スタイリング**: ピュアCSS (Grid / Flexbox / CSS 3D Transforms / clipPath)
+* **音響・音声 (拡張予定)**: Web Audio API / Web Speech API (自動台詞読み上げ用)
+* **サーバーレス完結**: サーバーやDBは一切不要。データ保存はブラウザの `localStorage`、独自台本の読み込みは `File API` によるドラッグ＆ドロップで動作する砂場（サンドボックス）設計。
+
+---
+
+## 5. 開発 Constitutional Law（開発憲法）
+
+当リポジトリへのコミットは、コードの可観測性を保つため、必ず以下の日本語プレフィックスを用いた複数行コミットメッセージ（タイトル＋空行＋詳細説明）を徹底すること。
+
+* `feat:` [機能追加] 新しいコンポーネントやシステムの追加
+* `fix:` [バグ修正] 視覚バグ、計算バグ、レイアウト崩れの修正
+* `style:` [見た目調整] 物理挙動を変えないCSS、フォント、カラーの微調整
+* `refactor:` [リファクタ] 責務分離、型定義整理、ロジックの純粋関数化
+
+---
+
+## 6. コマンド
+
+### 開発サーバーの起動
+
+```bash
+npm run dev
+
+```
+
+### ビルド
+
+```bash
+npm run build
+
+```
+
+```
+
+---
+
+いつでもこのクリーンなリポジトリから、次なる大玉機能**「ノベルゲーム風台本エリアの連動」**や**「Web Speech APIによるセリフ自動発声システム（自動進行）」**の仕込みへ突入できます！
+
+次はいよいよ、どのセクション（作家Gemにストーリーを書かせるか、演出家としてタイムラインJSONの設計に入るか）から攻めましょうか？
+
 ```
