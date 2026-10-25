@@ -12,7 +12,7 @@ export interface KoseriState {
   targetNamedPosition: '奈落' | 'ぬすみ' | '舞台' | '+450' | 'none';
 }
 
-// 演目タイムラインのイベント定義
+// 演目タイムラインのイベント定義 (既存互換用)
 export interface TimelineEvent {
   id: number;
   time: number;
@@ -34,7 +34,7 @@ export interface StageState {
   actorPresent: 'none' | 'back-stage' | 'on-stage' | 'haked'; // 役者の位置
 }
 
-// 【追加】興行の進行フェーズ定義（現場のタイムライン）
+// 興行の進行フェーズ定義（現場のタイムライン）
 export type StagePhase = 
   | 'SETTING'       // 1. セッティング（開場前・舞台上で大道具の事前仕込み・調整を行う）
   | 'DOORS_OPEN'    // 2. 開場（客入れ・SEIKO時計は現在時刻、客席がざわつき始める）
@@ -42,3 +42,25 @@ export type StagePhase =
   | 'INTERMISSION'  // 4. 幕間（休憩・次の幕に向けた転換・セット替え）
   | 'POST_SHOW'     // 5. 終演（バラシの準備、客席送り出し）
   | 'EXIT';         // 6. 客だし（完全撤収）
+
+// ==========================================
+// 🎭 【追加】ストーリーADV・キカケ駆動用のデータ抽象化型定義
+// ==========================================
+
+// 劇場内の各演出Engine（担当持ち場）の識別子
+export type PartType = "script" | "mechanism" | "lighting" | "audio" | "pin";
+
+// データ駆動のタイムラインで各Engineが解釈する抽象化演出キュー
+export interface TimelineCue {
+  id: string;
+  time: number;        // 開演（ストップウォッチ）からの絶対ミリ秒 (ms)
+  engine: PartType;    // どの部門が担当するか (例: "audio", "mechanism")
+  cue: string;         // 抽象化された識別子 (例: "KOSERI_UP_450", "SE_WHIP_SNAP")
+  label: string;       // インカムト書きや台本ディスプレイに表示される日本語指示テキスト
+}
+
+// 演目データパック（DLC）のルート規格
+export interface PlayScriptData {
+  playTitle: string;
+  timeline: TimelineCue[];
+}

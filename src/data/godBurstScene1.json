@@ -1,0 +1,21 @@
+{
+  "playTitle": "ゴッド・バースト 〜不屈の拳、荒野に咲け〜",
+  "blockNames": {
+    "cue_01": "１－１", "cue_02": "１－１",
+    "cue_03": "１－２", "cue_04": "１－２",
+    "cue_05": "１－３", "cue_06": "１－４"
+  },
+  "timeline": [
+    { "id": "cue_01", "time": 0, "engine": "audio", "cue": "SE_BUZZER", "label": "開演ブザー鳴動" },
+    { "id": "cue_02", "time": 3000, "engine": "lighting", "cue": "LIGHT_DARK_BLUE", "label": "【演出】客席暗転・舞台面ブルー" },
+    { "id": "cue_03", "time": 6000, "engine": "audio", "cue": "BGM_IRON_TOWN_IN", "label": "【演出】M1『鉄と泥の街』重低音イン" },
+    { "id": "cue_04", "time": 9000, "engine": "mechanism", "cue": "CURTAIN_MAIN_OPEN", "label": "★キカケ：緞帳全開" },
+    { "id": "cue_05", "time": 15000, "engine": "audio", "cue": "SE_WHIP_SNAP", "label": "★キカケ：黒鉄兵の鞭の音" },
+    { "id": "cue_06", "time": 22000, "engine": "mechanism", "cue": "KOSERI_UP_450", "label": "★キカケ：小迫り上昇" }
+  ],
+  "dialogues": [
+    { "id": "d_01", "time": 12000, "character": "黒鉄兵Ａ", "text": "「おい！ チンたら動くな！ 命が惜しくば手を動かせ！」" },
+    { "id": "d_02", "time": 18000, "character": "アルト", "text": "「待たせたな、ゼクス！ 今日こそお前をぶっ倒す！」" },
+    { "id": "d_03", "time": 20000, "character": "ゼクス", "text": "「また来たのか、アルト。お前のようなゴミが何回来ようと同じだ」" }
+  ]
+}
